@@ -144,6 +144,19 @@ function chatLine(m) {
   if (stick) box.scrollTop = box.scrollHeight;
   $('#chatCount').textContent = box.children.length;
 }
+function renderGoal() {
+  const g = S.goal;
+  const label = { running: 'В работе', done: 'Готово', cancelled: 'Отменено' };
+  $('#goalStatus').textContent = g
+    ? label[g.status] + ' · ' + g.title + ' · ' + g.done + '/' + g.total + (g.summary ? ' · ' + g.summary : '')
+    : 'Выбери цель для всего отряда.';
+}
+$('#goalActions').onclick = async e => {
+  const button = e.target.closest('[data-command]');
+  if (!button) return;
+  const result = await api('/chat', { method: 'POST', body: { text: button.dataset.command } });
+  if (result.error) toast(result.error, true);
+};
 $('#chatForm').onsubmit = async e => {
   e.preventDefault(); const t = $('#chatIn').value.trim(); if (!t) return; $('#chatIn').value = '';
   const r = await api('/chat', { method: 'POST', body: { text: t } }); if (r.error) toast(r.error, true);
@@ -419,6 +432,7 @@ function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('live', e => { onLive(JSON.parse(e.data)); renderStrip(); });
   es.addEventListener('cam', e => { const d = JSON.parse(e.data); follow = d.pin; followLabel(); if (d.entry) show(d.entry); });
+  es.addEventListener('goal', e => { S.goal = JSON.parse(e.data); renderGoal(); });
   es.addEventListener('chat', e => chatLine(JSON.parse(e.data)));
   es.addEventListener('astate', e => {
     const d = JSON.parse(e.data), a = agent(d.id); if (!a) return; a.state = d.state; a.target = d.target;
@@ -459,7 +473,7 @@ function connect() {
   (s.chat || []).forEach(chatLine); $('#chat').scrollTop = $('#chat').scrollHeight;
   camOk = !!s.cam?.available; follow = s.cam?.pin || null; followLabel(); setStage(stageMode);
   const last = s.cam?.entry || [...liveLog].reverse().find(e => e.type === 'page' || e.type === 'search'); if (last) show(last);
-  renderStrip(); renderAgents(); renderSecurity(); renderTiles(); connect();
+  renderStrip(); renderAgents(); renderSecurity(); renderTiles(); renderGoal(); connect();
   if (location.hash === '#models') renderModels();
   if (!s.keyOk) toast('Ключ OpenRouter не найден в .env — агенты работают на автопилоте', true);
 })();

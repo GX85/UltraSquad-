@@ -76,7 +76,7 @@
               <p class="stage__idle">Камера выходит в эфир…</p>
               <img id="camImg" alt="">
               <div class="stage__text" id="scrView">
-                <h2 class="screen__title" id="scrTitle">Агенты выходят в сеть</h2>
+                <h2 class="screen__title" id="scrTitle">Отряд ждёт общей цели</h2>
                 <p class="screen__note" id="scrNote"></p>
                 <div class="screen__text" id="scrText"></div>
                 <div class="screen__list" id="scrList"></div>
@@ -97,9 +97,19 @@
         <div class="live__side">
           <div class="pane chat">
             <div class="pane__head"><span>Чат отряда</span><span class="dim" id="chatCount">0</span></div>
+            <div class="pad" id="goalActions">
+              <p id="goalStatus" role="status">Выбери цель для всего отряда.</p>
+              <div class="tools">
+                <button class="btn btn--ghost btn--sm" data-command="цель: журнал" type="button">Журнал</button>
+                <button class="btn btn--ghost btn--sm" data-command="цель: блокировки" type="button">Блокировки</button>
+                <button class="btn btn--ghost btn--sm" data-command="цель: defender" type="button">Defender</button>
+                <button class="btn btn--ghost btn--sm" data-command="стоп" type="button">Стоп</button>
+                <button class="btn btn--ghost btn--sm" data-command="старт" type="button">Старт</button>
+              </div>
+            </div>
             <div class="chat__body" id="chat"></div>
             <form class="chat__form" id="chatForm">
-              <input class="field" id="chatIn" maxlength="500" placeholder="Написать отряду · @ИМЯ — обратиться к агенту" autocomplete="off" aria-label="Сообщение отряду">
+              <input class="field" id="chatIn" maxlength="500" placeholder="Например: стоп или цель: проверь журнал" autocomplete="off" aria-label="Сообщение отряду">
               <button class="send" aria-label="Отправить">↑</button>
             </form>
           </div>
