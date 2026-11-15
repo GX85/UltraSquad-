@@ -97,6 +97,7 @@ body.mode-app .hero__body,body.mode-app .legal{display:none}
 
 /* ---------- консоль ---------- */
 .console{display:none;min-height:0;flex-direction:column;gap:14px;padding:4px var(--gutter) clamp(14px,1.6vw,24px)}
+body.mode-app .hero{height:auto;overflow:visible}
 body.mode-app .console{display:flex;animation:rise .7s var(--ease)}
 @keyframes rise{from{opacity:0;transform:translateY(12px)}}
 @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.94)}}
@@ -170,14 +171,11 @@ body.mode-app .console{display:flex;animation:rise .7s var(--ease)}
 /* чат отряда */
 .chat {
   display: grid;
-  grid-template-rows: auto auto minmax(96px, 1fr) auto;
+  grid-template-rows: auto minmax(130px, 1fr) auto;
   min-height: min-content;
   max-height: min(68svh, 650px);
 }
-.chat #goalActions {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--stroke);
-}
+.goals { flex: none; padding: 12px 14px; }
 .chat .chat__body {
   min-height: 0;
   overflow-y: auto;
@@ -340,6 +338,18 @@ select.field option{background:#1c1c1e;color:#fff}
   text-align: center;
 }
 .hosted-notice a { color: inherit; text-decoration: underline; }
+
+.hosted-preview.mode-app .hosted-banner,
+.hosted-preview .goals,
+.hosted-preview #chat,
+.chat__form[hidden],
+.hosted-chat[hidden] { display: none; }
+.hosted-preview .live__side .chat {
+  grid-template-rows: auto auto;
+  height: auto;
+  flex: none;
+}
+.hosted-chat p { margin: 0 0 12px; }
 
 #goalStatus { margin: 0 0 8px; overflow-wrap: anywhere; }
 @media (max-width: 720px) {

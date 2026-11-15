@@ -462,8 +462,12 @@ function connect() {
       link.href = 'http://127.0.0.1:7777/#live';
       link.textContent = 'открой локальную панель';
       notice.append(link, '.');
+      notice.classList.add('hosted-banner');
       document.body.prepend(notice);
-      $$('.view').forEach(view => { view.inert = true; });
+      document.body.classList.add('hosted-preview');
+      $('#hostedChat').hidden = false;
+      $('#chatForm').hidden = true;
+      $('.view:not(#v-live), #v-live .live__main, #v-live .feed').forEach(view => { view.inert = true; });
     }
     return;
   }

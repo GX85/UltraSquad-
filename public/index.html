@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=chat-layout-2">
 </head>
 <body>
 <div class="hero" id="shell">
@@ -105,19 +105,23 @@
           <div class="tiles" id="tiles"></div>
         </div>
         <div class="live__side">
+          <div class="pane goals pad" id="goalActions">
+            <p id="goalStatus" role="status">Выбери цель для всего отряда.</p>
+            <div class="tools">
+              <button class="btn btn--ghost btn--sm" data-command="цель: журнал" type="button">Журнал</button>
+              <button class="btn btn--ghost btn--sm" data-command="цель: блокировки" type="button">Блокировки</button>
+              <button class="btn btn--ghost btn--sm" data-command="цель: defender" type="button">Defender</button>
+              <button class="btn btn--ghost btn--sm" data-command="стоп" type="button">Стоп</button>
+              <button class="btn btn--ghost btn--sm" data-command="старт" type="button">Старт</button>
+            </div>
+          </div>
           <div class="pane chat">
             <div class="pane__head"><span>Чат отряда</span><span class="dim" id="chatCount">0</span></div>
-            <div class="pad" id="goalActions">
-              <p id="goalStatus" role="status">Выбери цель для всего отряда.</p>
-              <div class="tools">
-                <button class="btn btn--ghost btn--sm" data-command="цель: журнал" type="button">Журнал</button>
-                <button class="btn btn--ghost btn--sm" data-command="цель: блокировки" type="button">Блокировки</button>
-                <button class="btn btn--ghost btn--sm" data-command="цель: defender" type="button">Defender</button>
-                <button class="btn btn--ghost btn--sm" data-command="стоп" type="button">Стоп</button>
-                <button class="btn btn--ghost btn--sm" data-command="старт" type="button">Старт</button>
-              </div>
-            </div>
             <div class="chat__body" id="chat"></div>
+            <div class="pad hosted-chat" id="hostedChat" hidden>
+              <p>Чат и команды работают через сервер UltraSquad на твоём устройстве.</p>
+              <a class="btn btn--solid btn--sm" href="http://127.0.0.1:7777/#live">Открыть локальный чат</a>
+            </div>
             <form class="chat__form" id="chatForm">
               <input class="field" id="chatIn" maxlength="500" placeholder="Например: стоп или цель: проверь журнал" autocomplete="off" aria-label="Сообщение отряду">
               <button class="send" aria-label="Отправить">↑</button>
