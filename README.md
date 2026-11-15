@@ -40,7 +40,14 @@ Microsoft Defender и камера Edge работают только в Windows
 
 ## Вход на публичном сайте
 
-Используй отдельный проект Supabase Auth. Включи Google и GitHub в списке провайдеров и зарегистрируй указанный Supabase OAuth callback у обоих провайдеров.
-В Supabase укажи Site URL `https://ultrasquad.vercel.app` и добавь точный Redirect URL `https://ultrasquad.vercel.app/api/auth?action=callback`.
-На Vercel добавь переменные `SUPABASE_URL` и `SUPABASE_PUBLISHABLE_KEY` для Production, затем переопубликуй сайт.
-Секреты Google и GitHub вводятся в настройках провайдеров Supabase. Вход на Vercel не открывает управление локальным сервером из интернета.
+UltraSquad подключается напрямую к Google и GitHub через OAuth.
+Зарегистрируй веб-клиент Google и OAuth App на GitHub. Укажи соответствующий адрес возврата:
+
+- Google: `https://ultrasquad.vercel.app/api/auth?action=callback&provider=google`
+- GitHub: `https://ultrasquad.vercel.app/api/auth?action=callback&provider=github`
+
+Добавь в настройки Production на Vercel `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` и отдельный случайный `AUTH_SESSION_SECRET`
+размером не менее 32 байт. После изменения переменных переопубликуй сайт.
+Можно начать с одного провайдера: сайт покажет только настроенные кнопки.
+Секреты остаются в Vercel. Вход на Vercel не открывает управление локальным сервером из интернета.

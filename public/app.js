@@ -493,11 +493,16 @@ function connect() {
     account.hidden = false;
     const status = new URL(location.href).searchParams.get('auth');
     if (data.user) {
-      notice.textContent = data.user.email;
+      notice.textContent = data.user.name;
       account.querySelector('form').hidden = false;
     } else {
       if (status === 'failed') notice.textContent = 'Не удалось войти. Попробуй ещё раз.';
-      account.querySelector('#loginLinks').hidden = false;
+      const links = account.querySelector('#loginLinks');
+      for (const link of links.querySelectorAll('a')) {
+        const provider = new URL(link.href).searchParams.get('provider');
+        link.hidden = !data.providers.includes(provider);
+      }
+      links.hidden = false;
     }
     if (status) history.replaceState(null, '', location.pathname + location.hash);
   } catch {

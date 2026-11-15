@@ -1,83 +1,144 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const site = 'https://ultrasquad.vercel.app';
-const route = '/api/auth';
-const config = () => {
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
-  const url = process.env.SUPABASE_URL?.replace(/\/+$/, '');
-  return key?.startsWith('sb_publishable_') && /^https:\/\/[a-z0-9]+\.supabase\.co$/.test(url || '') ? { key, url } : null;
+const path = '/api/auth';
+const flowCookie = '__Host-us_oauth';
+const sessionCookie = '__Host-us_session';
+const providers = {
+  google: {
+    prefix: 'GOOGLE',
+    authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
+    token: 'https://oauth2.googleapis.com/token',
+    profile: 'https://openidconnect.googleapis.com/v1/userinfo',
+    scope: 'openid profile',
+    identity: data => typeof data.sub === 'string' && data.sub
+      ? { id: data.sub, name: data.name || 'Google', provider: 'google' } : null
+  },
+  github: {
+    prefix: 'GITHUB',
+    authorize: 'https://github.com/login/oauth/authorize',
+    token: 'https://github.com/login/oauth/access_token',
+    profile: 'https://api.github.com/user',
+    scope: '',
+    identity: data => Number.isSafeInteger(data.id) && data.id > 0 && data.login
+      ? { id: String(data.id), name: data.login, provider: 'github' } : null
+  }
 };
-const cookie = (name, value, age) => name + '=' + value + '; Path=' + route + '; Max-Age=' + age + '; Secure; HttpOnly; SameSite=Lax';
+
+function configuration() {
+  const key = process.env.AUTH_SESSION_SECRET || '';
+  if (Buffer.byteLength(key) < 32) return { key: null, active: {} };
+  const active = {};
+  for (const [name, provider] of Object.entries(providers)) {
+    const id = process.env[provider.prefix + '_CLIENT_ID'];
+    const secret = process.env[provider.prefix + '_CLIENT_SECRET'];
+    if (id && secret) active[name] = { ...provider, id, secret };
+  }
+  return { key, active };
+}
+
+const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+const signature = (key, purpose, payload) => createHmac('sha256', key).update(purpose + '.' + payload).digest('base64url');
+const seal = (key, purpose, value) => {
+  const payload = encode(value);
+  return payload + '.' + signature(key, purpose, payload);
+};
+
+function equal(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const first = Buffer.from(a), second = Buffer.from(b);
+  return first.length === second.length && timingSafeEqual(first, second);
+}
+
+function unseal(key, purpose, value) {
+  if (!key || !value || !/^[\w-]+\.[\w-]+$/.test(value) || value.length > 3500) return null;
+  const [payload, mac] = value.split('.');
+  if (!equal(mac, signature(key, purpose, payload))) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    return decoded.exp > Date.now() ? decoded : null;
+  } catch { return null; }
+}
+
+const cookie = (name, value, age) => name + '=' + value + '; Path=/; Max-Age=' + age + '; Secure; HttpOnly; SameSite=Lax';
 const clear = name => cookie(name, '', 0);
 const readCookies = req => Object.fromEntries((req.headers.cookie || '').split(';').map(x => x.trim().split('=', 2)).filter(pair => pair.length === 2));
-const redirect = (res, to, cookies = []) => {
-  res.setHeader('Location', to);
-  if (cookies.length) res.setHeader('Set-Cookie', cookies);
-  res.status(303).end();
-};
+const callback = name => site + path + '?action=callback&provider=' + name;
 const landing = result => '/?auth=' + result;
+function redirect(res, location, cookies = []) {
+  res.setHeader('Location', location);
+  if (cookies.length) res.setHeader('Set-Cookie', cookies);
+  return res.status(303).end();
+}
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  const request = new URL(req.url, site);
-  const action = request.searchParams.get('action') || 'session';
+  const params = new URL(req.url, site).searchParams;
+  const action = params.get('action') || 'session';
+  const cookies = readCookies(req);
+  const { key, active } = configuration();
+  const available = Object.keys(active);
   if (action === 'logout') {
     if (req.method !== 'POST') return res.status(405).end();
     if (req.headers.origin !== site) return res.status(403).end();
-    return redirect(res, '/', [clear('us_access'), clear('us_verifier')]);
+    return redirect(res, '/', [clear(flowCookie), clear(sessionCookie)]);
+  }
+  if (req.method !== 'GET') return res.status(405).end();
+  if (action === 'session') {
+    const session = unseal(key, 'session', cookies[sessionCookie]);
+    const user = session && Object.hasOwn(active, session.user.provider) ? session.user : null;
+    return res.status(200).json({ configured: !!available.length, providers: available, user });
   }
 
-  if (req.method !== 'GET') return res.status(405).end();
-  const settings = config();
-  if (action === 'session' && !settings) return res.status(200).json({ configured: false });
+  const provider = params.get('provider');
+  if (!['login', 'callback'].includes(action) || !['google', 'github'].includes(provider)) return res.status(400).end();
+  const settings = active[provider];
   if (!settings) return redirect(res, landing('unavailable'));
 
   if (action === 'login') {
     if (!['same-origin', 'none', undefined].includes(req.headers['sec-fetch-site'])) return res.status(403).end();
-    const provider = request.searchParams.get('provider');
-    if (!['google', 'github'].includes(provider)) return res.status(400).end();
     const verifier = randomBytes(32).toString('base64url');
+    const state = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    const authorize = new URL(settings.url + '/auth/v1/authorize');
+    const authorize = new URL(settings.authorize);
     authorize.search = new URLSearchParams({
-      provider, code_challenge: challenge, code_challenge_method: 's256',
-      redirect_to: site + route + '?action=callback'
+      client_id: settings.id, redirect_uri: callback(provider), response_type: 'code',
+      scope: settings.scope, state, code_challenge: challenge, code_challenge_method: 'S256'
     });
-    return redirect(res, authorize.href, [cookie('us_verifier', verifier, 600)]);
+    const flow = seal(key, 'oauth', { provider, verifier, state, exp: Date.now() + 600_000 });
+    return redirect(res, authorize.href, [cookie(flowCookie, flow, 600)]);
   }
 
-  const cookies = readCookies(req);
+  const flow = unseal(key, 'oauth', cookies[flowCookie]);
+  const code = params.get('code');
+  if (!flow || flow.provider !== provider || !equal(flow.state, params.get('state')) || !code || code.length > 2048) {
+    return redirect(res, landing('failed'), [clear(flowCookie)]);
+  }
   try {
-    if (action === 'callback') {
-      const code = request.searchParams.get('code');
-      const verifier = cookies.us_verifier;
-      if (!code || !/^[a-zA-Z0-9_-]{43}$/.test(verifier || '')) return redirect(res, landing('failed'), [clear('us_verifier')]);
-      const response = await fetch(settings.url + '/auth/v1/token?grant_type=pkce', {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
-        headers: { apikey: settings.key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ auth_code: code, code_verifier: verifier })
-      });
-      const session = response.ok ? await response.json() : null;
-      if (!session || !/^[\w.-]{1,3600}$/.test(session.access_token || '')) return redirect(res, landing('failed'), [clear('us_verifier')]);
-      const age = Math.min(3600, Math.max(1, Number(session.expires_in) || 1));
-      return redirect(res, landing('ok'), [clear('us_verifier'), cookie('us_access', session.access_token, age)]);
-    }
-    if (action !== 'session') return res.status(404).end();
-    if (!cookies.us_access) return res.status(200).json({ configured: true, user: null });
-    const response = await fetch(settings.url + '/auth/v1/user', {
-      redirect: 'error', signal: AbortSignal.timeout(5000),
-      headers: { apikey: settings.key, Authorization: 'Bearer ' + cookies.us_access }
+    const token = await fetch(settings.token, {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: settings.id, client_secret: settings.secret, code, code_verifier: flow.verifier,
+        redirect_uri: callback(provider), grant_type: 'authorization_code'
+      })
     });
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) res.setHeader('Set-Cookie', clear('us_access'));
-      return res.status(200).json({ configured: true, user: null });
-    }
-    const user = await response.json();
-    return res.status(200).json({ configured: true, user: user.id && !user.is_anonymous ? { email: user.email || 'Аккаунт подключён' } : null });
+    if (!token.ok) throw new Error('OAuth token');
+    const { access_token: access } = await token.json();
+    if (typeof access !== 'string' || !access) throw new Error('OAuth access token');
+    const profile = await fetch(settings.profile, {
+      redirect: 'error', signal: AbortSignal.timeout(5000),
+      headers: { Accept: 'application/json', Authorization: 'Bearer ' + access, 'User-Agent': 'UltraSquad' }
+    });
+    if (!profile.ok) throw new Error('OAuth profile');
+    const user = settings.identity(await profile.json());
+    if (!user) throw new Error('OAuth identity');
+    user.name = String(user.name).slice(0, 120);
+    const session = seal(key, 'session', { user, exp: Date.now() + 3_600_000 });
+    return redirect(res, landing('ok'), [clear(flowCookie), cookie(sessionCookie, session, 3600)]);
   } catch {
-    if (action === 'callback') return redirect(res, landing('failed'), [clear('us_verifier')]);
-    return res.status(503).json({ configured: true, error: 'Сервис входа временно недоступен' });
+    return redirect(res, landing('failed'), [clear(flowCookie)]);
   }
 }
 

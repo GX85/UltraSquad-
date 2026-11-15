@@ -367,3 +367,5 @@ select.field option{background:#1c1c1e;color:#fff}
     height: clamp(350px, 54svh, 500px);
   }
 }
+
+#account [hidden] { display: none; }
