@@ -168,6 +168,23 @@ body.mode-app .console{display:flex;animation:rise .7s var(--ease)}
 .tile p{font-size:11.5px;color:var(--text-3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:none;margin-top:auto}
 
 /* чат отряда */
+.chat {
+  display: grid;
+  grid-template-rows: auto auto minmax(96px, 1fr) auto;
+  min-height: min-content;
+  max-height: min(68svh, 650px);
+}
+.chat #goalActions {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--stroke);
+}
+.chat .chat__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  contain: size;
+}
+.chat__body > .cm { flex: none; }
 .chat__body,.msgs{flex:1;overflow-y:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:10px}
 .cm{display:flex;gap:9px;align-items:flex-end;animation:pop .5s var(--spring)}
 .cm__av{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;color:#fff;background:linear-gradient(145deg,hsl(var(--h) 80% 62%),hsl(calc(var(--h) + 40) 75% 46%));box-shadow:0 4px 12px -4px hsl(var(--h) 80% 50% / .7),inset 0 1px 0 rgba(255,255,255,.35)}
@@ -328,9 +345,15 @@ select.field option{background:#1c1c1e;color:#fff}
 @media (max-width: 720px) {
   .live__side { grid-row: 1; }
   .live__side .chat { height: min(76svh, 540px); }
-  .chat__body { min-height: 0; }
   .chat__form .field { min-width: 0; font-size: 16px; }
   #goalActions .tools { gap: 6px; }
   #goalActions button, .chat__form .send { min-height: 44px; }
   .window { min-height: 43svh; }
+}
+
+@media (min-width: 901px) {
+  .live__side .chat {
+    flex: none;
+    height: clamp(350px, 54svh, 500px);
+  }
 }
