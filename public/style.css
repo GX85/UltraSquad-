@@ -323,3 +323,14 @@ select.field option{background:#1c1c1e;color:#fff}
   text-align: center;
 }
 .hosted-notice a { color: inherit; text-decoration: underline; }
+
+#goalStatus { margin: 0 0 8px; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .live__side { grid-row: 1; }
+  .live__side .chat { height: min(76svh, 540px); }
+  .chat__body { min-height: 0; }
+  .chat__form .field { min-width: 0; font-size: 16px; }
+  #goalActions .tools { gap: 6px; }
+  #goalActions button, .chat__form .send { min-height: 44px; }
+  .window { min-height: 43svh; }
+}

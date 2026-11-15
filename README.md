@@ -21,3 +21,19 @@ Sentinel обновляет состояние Microsoft Defender каждые 3
 Патруль и блокировка подозрительных входящих запросов работают без ключей и модели.
 
 Vercel публикует интерфейс из `public`. Панель с данными, камера и агент Windows работают через локальный сервер.
+
+## Сервер на Android
+
+Установи [Termux](https://github.com/termux/termux-app#installation), затем выполни:
+
+```sh
+pkg update
+pkg install git nodejs-lts
+git clone https://github.com/GX85/UltraSquad-.git ultrasquad
+cd ultrasquad
+node server.js
+```
+
+Открой http://127.0.0.1:7777/#live в браузере на этом же телефоне.
+Для работы сервера оставь Termux запущенным. На Android доступны чат, цели и журнал запросов этого сервера.
+Microsoft Defender и камера Edge работают только в Windows.

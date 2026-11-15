@@ -515,12 +515,10 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=u
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; media-src https://d8j0ntlcm91z4.cloudfront.net; img-src 'self' data: https://d8j0ntlcm91z4.cloudfront.net; connect-src 'self'; frame-ancestors 'none'";
 const json = (res, code, v) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(v)); };
 async function body(req) {
-  const sizeLimit = 64 * 1024;
   let size = 0;
   const chunks = [];
   for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > sizeLimit) throw Object.assign(new Error('Запрос слишком большой'), { status: 413 });
     chunks.push(chunk);
   }
   if (!size) return {};
@@ -659,10 +657,6 @@ const server = http.createServer({ requestTimeout: 15000, headersTimeout: 10000,
       if (write && hasBody && !/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) {
         return json(res, 415, { error: 'Ожидается application/json' });
       }
-      if (write && Number(req.headers['content-length']) > 64 * 1024) {
-        res.setHeader('Connection', 'close');
-        return json(res, 413, { error: 'Запрос слишком большой' });
-      }
       return await api(req, res, url);
     }
     if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405, { Allow: 'GET, HEAD' }); return res.end(); }
@@ -681,7 +675,6 @@ const server = http.createServer({ requestTimeout: 15000, headersTimeout: 10000,
     const status = e.status || 500;
     if (status === 500) log('http', e.message);
     if (res.headersSent || res.destroyed) return res.end();
-    if (status === 413) res.setHeader('Connection', 'close');
     json(res, status, { error: status === 500 ? 'Ошибка сервера' : e.message });
   }
 });
