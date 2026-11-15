@@ -477,3 +477,26 @@ function connect() {
   if (location.hash === '#models') renderModels();
   if (!s.keyOk) toast('Ключ OpenRouter не найден в .env — агенты работают на автопилоте', true);
 })();
+
+(async function loadAccount() {
+  if (location.hostname !== 'ultrasquad.vercel.app') return;
+  const account = document.querySelector('#account');
+  const notice = document.querySelector('#accountStatus');
+  try {
+    const response = await fetch('/api/auth');
+    const data = await response.json();
+    if (!data.configured) return;
+    account.hidden = false;
+    const status = new URL(location.href).searchParams.get('auth');
+    if (data.user) {
+      notice.textContent = data.user.email;
+      account.querySelector('form').hidden = false;
+    } else {
+      if (status === 'failed') notice.textContent = 'Не удалось войти. Попробуй ещё раз.';
+      account.querySelector('#loginLinks').hidden = false;
+    }
+    if (status) history.replaceState(null, '', location.pathname + location.hash);
+  } catch {
+    // The published site can load even when the optional account service is offline.
+  }
+})();

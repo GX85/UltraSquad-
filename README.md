@@ -37,3 +37,10 @@ node server.js
 Открой http://127.0.0.1:7777/#live в браузере на этом же телефоне.
 Для работы сервера оставь Termux запущенным. На Android доступны чат, цели и журнал запросов этого сервера.
 Microsoft Defender и камера Edge работают только в Windows.
+
+## Вход на публичном сайте
+
+Используй отдельный проект Supabase Auth. Включи Google и GitHub в списке провайдеров и зарегистрируй указанный Supabase OAuth callback у обоих провайдеров.
+В Supabase укажи Site URL `https://ultrasquad.vercel.app` и добавь точный Redirect URL `https://ultrasquad.vercel.app/api/auth?action=callback`.
+На Vercel добавь переменные `SUPABASE_URL` и `SUPABASE_PUBLISHABLE_KEY` для Production, затем переопубликуй сайт.
+Секреты Google и GitHub вводятся в настройках провайдеров Supabase. Вход на Vercel не открывает управление локальным сервером из интернета.
