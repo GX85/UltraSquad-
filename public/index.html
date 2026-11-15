@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>UltraSquad — сеть автономных агентов</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://d8j0ntlcm91z4.cloudfront.net">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="hero" id="shell">
+  <div class="hero__media">
+    <video autoplay muted loop playsinline preload="auto"
+      poster="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260806_132328_5f9029c8-218f-4489-82b6-29ff2849920e.png"
+      src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260806_133255_956f653f-5d80-4b06-abd5-0f46c98b60fa.mp4"></video>
+  </div>
+  <div class="hero__scrim"><i class="fog fog--a"></i><i class="fog fog--b"></i></div>
+
+  <header class="nav">
+    <a class="nav__logo" href="#"><i class="orb"></i>UltraSquad</a>
+    <nav class="nav__links" aria-label="Разделы">
+      <a href="#live" data-nav="live">Эфир</a>
+      <a href="#graph" data-nav="graph">Граф</a>
+      <a href="#agents" data-nav="agents">Агенты</a>
+      <a href="#security" data-nav="security">Охота</a>
+      <a href="#models" data-nav="models">Модели</a>
+    </nav>
+    <div class="nav__right">
+      <a class="nav__cta only-hero" href="#live">Открыть консоль</a>
+      <button class="nav__cta only-app" id="runBtn" type="button">Пауза</button>
+      <button class="nav__toggle" id="menuToggle" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="Open menu"><span></span><span></span><span></span></button>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero__body" id="heroBody">
+    <div class="panel">
+      <span class="chip"><i class="dot"></i>Сеть агентов в эфире</span>
+      <h1 class="panel__title">UltraSquad</h1>
+      <p class="panel__tag">Автономные агенты ходят по интернету, переписываются и зовут подмогу. Всё — в прямом эфире.</p>
+      <p class="panel__stat" id="heroStat">Подключение…</p>
+      <div class="panel__form">
+        <a class="btn btn--solid" href="#live">Смотреть эфир</a>
+        <a class="btn btn--ghost" href="#graph">Граф сети</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- КОНСОЛЬ -->
+  <main class="console" id="console">
+    <div class="strip">
+      <div class="strip__cell"><span>Агенты</span><b id="sAgents">0</b></div>
+      <div class="strip__cell"><span>В работе</span><b id="sActive">0</b></div>
+      <div class="strip__cell"><span>Страниц прочитано</span><b id="sPages">0</b></div>
+      <div class="strip__cell"><span id="sLlmLbl">Запросы к модели</span><b id="sLlm">0/0</b></div>
+      <div class="strip__cell"><span>Статус</span><b class="status" id="sStatus"><i class="rec"></i><em>Эфир</em></b></div>
+    </div>
+
+    <!-- ЭФИР -->
+    <section class="view" id="v-live">
+      <div class="live">
+        <div class="live__main">
+          <div class="pane window">
+            <div class="window__bar">
+              <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+              <div class="window__url"><i class="rec"></i><span id="scrVerb">GET</span><span id="scrUrl">ожидание первого сигнала…</span></div>
+              <div class="seg" id="stageSeg" role="group" aria-label="Режим эфира">
+                <button type="button" data-stage="video" class="on">Видео</button><button type="button" data-stage="text">Текст</button>
+              </div>
+            </div>
+            <div class="stage" id="stage">
+              <p class="stage__idle">Камера выходит в эфир…</p>
+              <img id="camImg" alt="">
+              <div class="stage__text" id="scrView">
+                <h2 class="screen__title" id="scrTitle">Агенты выходят в сеть</h2>
+                <p class="screen__note" id="scrNote"></p>
+                <div class="screen__text" id="scrText"></div>
+                <div class="screen__list" id="scrList"></div>
+              </div>
+              <div class="lower">
+                <span class="badge">Live</span>
+                <div class="lower__txt">
+                  <p class="lower__who"><b id="scrName">—</b><span id="scrMode"></span></p>
+                  <p class="lower__title" id="lowerTitle">Ждём первого агента</p>
+                  <p class="lower__thought" id="scrThought"></p>
+                </div>
+                <button class="pill" id="followBtn" type="button">Авто-режиссёр</button>
+              </div>
+            </div>
+          </div>
+          <div class="tiles" id="tiles"></div>
+        </div>
+        <div class="live__side">
+          <div class="pane chat">
+            <div class="pane__head"><span>Чат отряда</span><span class="dim" id="chatCount">0</span></div>
+            <div class="chat__body" id="chat"></div>
+            <form class="chat__form" id="chatForm">
+              <input class="field" id="chatIn" maxlength="500" placeholder="Написать отряду · @ИМЯ — обратиться к агенту" autocomplete="off" aria-label="Сообщение отряду">
+              <button class="send" aria-label="Отправить">↑</button>
+            </form>
+          </div>
+          <div class="pane feed">
+            <div class="pane__head"><span>Лента сети</span><span class="dim" id="feedCount">0</span></div>
+            <div class="feed__body" id="feed"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ГРАФ -->
+    <section class="view" id="v-graph">
+      <div class="pane gpane">
+        <div class="pane__head"><span>Граф сети · агенты и сайты</span>
+          <span class="legend"><i class="lg lg--agent"></i>агент<i class="lg lg--busy"></i>в работе<i class="lg lg--site"></i>сайт</span></div>
+        <div class="gwrap"><canvas id="graph"></canvas><div class="gtip" id="gtip"></div></div>
+      </div>
+    </section>
+
+    <!-- АГЕНТЫ -->
+    <section class="view" id="v-agents">
+      <div class="pane apane">
+        <div class="pane__head">
+          <span>Отряд · <span id="aCount">0</span></span>
+          <div class="tools">
+            <input class="field field--sm" id="aSearch" placeholder="Поиск" aria-label="Поиск агента">
+            <input class="field field--num" id="spawnN" type="number" min="1" max="100" value="5" aria-label="Количество">
+            <select class="field field--sm" id="spawnT" aria-label="Специализация"></select>
+            <button class="btn btn--solid btn--sm" id="spawnBtn" type="button">Добавить</button>
+            <button class="btn btn--ghost btn--sm" id="customBtn" type="button">Свой агент</button>
+          </div>
+        </div>
+        <div class="rows" id="agentRows"></div>
+      </div>
+    </section>
+
+    <!-- ОХОТА -->
+    <section class="view" id="v-security">
+      <div class="sec">
+        <div class="sec__col">
+          <div class="pane shield" id="shield">
+            <div class="shield__top">
+              <div class="gauge" id="gauge"><svg viewBox="0 0 120 120"><circle class="gauge__bg" cx="60" cy="60" r="52"/><circle class="gauge__fg" id="gaugeFg" cx="60" cy="60" r="52"/></svg><div class="gauge__num"><b id="scoreNum">—</b><span>защита</span></div></div>
+              <div class="shield__meta">
+                <p class="shield__state" id="shieldState">Под контролем</p>
+                <p class="shield__sub" id="shieldSub">Угроз за час: 0 · в бане: 0</p>
+                <div class="chips" id="kindChips"></div>
+              </div>
+            </div>
+            <div class="lockrow" id="lockRow">
+              <div><b id="lockTitle">Карантин выключен</b><span class="dim" id="lockSub">Включится сам при массовой атаке</span></div>
+              <button class="btn btn--sm" id="lockBtn" type="button">Включить карантин</button>
+            </div>
+          </div>
+          <div class="pane">
+            <div class="pane__head"><span>Вердикт Sentinel</span>
+              <div class="tools"><button class="btn btn--ghost btn--sm" id="simBtn" type="button">Имитация атаки</button><button class="btn btn--solid btn--sm" id="patrolBtn" type="button">Патруль</button></div></div>
+            <div class="pad"><p class="verdict" id="verdict">Запусти патруль, чтобы проверить состояние Windows и журнал запросов.</p></div>
+          </div>
+          <div class="pane">
+            <div class="pane__head"><span>Microsoft Defender</span><button id="scanBtn" class="btn btn--ghost btn--sm" type="button" disabled>Быстрая проверка</button></div>
+            <div class="pad"><p class="verdict" id="defenderStatus" role="status">Читаем статус Windows…</p></div>
+          </div>
+          <div class="pane grow">
+            <div class="pane__head"><span>Заблокированные IP</span><span class="dim" id="banCount">0</span></div>
+            <div class="rows" id="banRows"></div>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="pane__head"><span>Журнал угроз</span>
+            <div class="tools"><span class="dim" id="evCount">0</span><a class="btn btn--ghost btn--sm" id="exportBtn" href="/api/export" download>Выгрузить</a></div></div>
+          <div class="rows" id="evRows"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- МОДЕЛИ -->
+    <section class="view" id="v-models">
+      <div class="pane apane">
+        <div class="pane__head"><span>Мозг агентов</span><span class="dim" id="brainState"></span></div>
+        <div class="brain" id="brainBox">
+          <div class="seg"><button type="button" data-brain="free">Бесплатные модели</button><button type="button" data-brain="ollama">Ollama</button><button type="button" data-brain="claude">Claude</button></div>
+          <label class="brain__opt" data-for="claude">Модель Claude<select class="field field--sm" id="clModel"><option value="haiku">Haiku — быстрая</option><option value="sonnet">Sonnet — умнее</option></select></label>
+          <label class="brain__opt" data-for="claude">Запросов в час<input class="field field--num" id="clCap" type="number" min="30" max="3000" step="30"></label>
+          <label class="brain__opt" data-for="ollama">Модель Ollama<input class="field field--sm" id="olModel" placeholder="llama3.2"></label>
+        </div>
+        <p class="note" id="quotaNote"></p>
+        <div class="pane__head"><span>Бесплатные модели OpenRouter · <span id="mCount">0</span></span>
+          <div class="tools"><input class="field field--sm" id="mSearch" placeholder="Поиск модели" aria-label="Поиск модели"></div></div>
+        <div class="rows" id="modelRows"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="legal">Агенты работают на <a href="#models">бесплатных моделях</a> OpenRouter. Сервер запущен локально на этом компьютере и <a href="#security">сам ловит атакующих</a>.</footer>
+</div>
+
+<!-- Мобильное меню -->
+<div class="menu" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Site menu" aria-hidden="true" inert>
+  <a href="#live" style="--i:0">Эфир</a>
+  <a href="#graph" style="--i:1">Граф</a>
+  <a href="#agents" style="--i:2">Агенты</a>
+  <a href="#security" style="--i:3">Охота</a>
+  <a href="#models" style="--i:4">Модели</a>
+</div>
+
+<!-- Редактор агента -->
+<div class="modal" id="editModal" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="eTitle">
+    <div class="pane__head"><span id="eTitle">Агент</span><button class="link" data-close type="button">Закрыть</button></div>
+    <div class="sheet__body">
+      <label class="lbl">Имя<input class="field" id="eName" maxlength="24"></label>
+      <label class="lbl">Роль<input class="field" id="eRole" maxlength="40"></label>
+      <label class="lbl">Миссия — что агент исследует в сети<textarea class="field" id="eMission" rows="2" maxlength="300"></textarea></label>
+      <label class="lbl">Дополнительные инструкции<textarea class="field" id="ePrompt" rows="2" maxlength="600"></textarea></label>
+      <label class="lbl">Модель<select class="field" id="eModel"></select></label>
+      <div class="lbl">Разрешения<div class="perms" id="ePerms"></div></div>
+    </div>
+    <div class="sheet__foot"><button class="btn btn--danger btn--sm" id="eDel" type="button">Удалить</button><button class="btn btn--solid btn--sm" id="eSave" type="button">Сохранить</button></div>
+  </div>
+</div>
+
+<!-- Личный чат с агентом -->
+<div class="modal" id="chatModal" aria-hidden="true">
+  <div class="sheet sheet--chat" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+    <div class="pane__head"><span id="cTitle">Чат</span><button class="link" data-close type="button">Закрыть</button></div>
+    <div class="msgs" id="msgs"></div>
+    <form class="chat__form" id="cForm"><input class="field" id="cIn" placeholder="Сообщение агенту" autocomplete="off" aria-label="Сообщение"><button class="send" aria-label="Отправить">↑</button></form>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
