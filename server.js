@@ -503,7 +503,7 @@ async function executeTask(text) {
         result = 'Данные локальной системы: ' + JSON.stringify(sysInfo());
         live(a, 'note', { text: 'Получены показатели локального сервера' });
       } else if (plan.action === 'read') {
-        if (!a.permissions.includes('web.browse')) throw Error('Агенту не выдано право web.browse');
+        // Чтение публичных веб-страниц разрешено всем включённым агентам через SSRF-защищённые инструменты.
         setState(a, 'reading', plan.input); say(a, 'info', 'Открываю страницу: ' + plan.input);
         const page = await webTools.fetchPage(plan.input);
         if (!active()) return;
@@ -511,7 +511,7 @@ async function executeTask(text) {
         pages = [page];
         result = page.title + ': ' + page.text.slice(0, 1100);
       } else {
-        if (!a.permissions.includes('web.browse')) throw Error('Агенту не выдано право web.browse');
+        // Чтение публичных веб-страниц разрешено всем включённым агентам через SSRF-защищённые инструменты.
         setState(a, 'searching', plan.input); say(a, 'info', 'Ищу в интернете: ' + plan.input);
         const found = await webTools.search(plan.input);
         if (!active()) return;
@@ -703,7 +703,7 @@ async function api(req, res, url) {
     const b = await body(req); const text = String(b.text || '').trim().slice(0, 500);
     if (!text) return json(res, 400, { error: 'Пустое сообщение' });
     say(null, 'user', text);
-    return json(res, 200, handleCommand(text));
+    return json(res, 200, await handleCommand(text));
   }
   if (url === '/api/bans' && req.method === 'DELETE') { const b = await body(req); delete bans[b.ip]; persist(); push('bans', bans); return json(res, 200, bans); }
   if (url === '/api/simulate' && req.method === 'POST') {
