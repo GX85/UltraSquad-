@@ -130,6 +130,40 @@ function rt(a) {
 function setState(a, state, target = '') { const r = rt(a); r.state = state; r.target = target; push('astate', { id: a.id, state, target }); }
 const pub = a => ({ ...a, seeds: undefined, state: rt(a).state, target: rt(a).target });
 
+// Управление локальным агентом. В карантине нет полномочий на исполнение задач.
+function isolateAgent(a, reason = 'Оператор запросил изоляцию') {
+  if (a.quarantinedAt) return 'Агент ' + a.name + ' уже изолирован.';
+  a.enabled = false;
+  a.permissions = [];
+  a.quarantinedAt = Date.now();
+  a.quarantineReason = String(reason).slice(0, 180);
+  if (goal?.status === 'running' && goal.agentId === a.id) {
+    taskSequence++;
+    goal.status = 'cancelled';
+    goal.summary = 'Агент изолирован';
+    push('goal', goal);
+  }
+  setState(a, 'idle');
+  say(commander(), 'alert', 'Агент ' + a.name + ' ИЗОЛИРОВАН. Доступ к инструментам отозван. Причина: ' + a.quarantineReason);
+  persist();
+  pushAgents();
+  return 'Агент ' + a.name + ' изолирован, инструменты отключены.';
+}
+function releaseAgent(a) {
+  if (!a.quarantinedAt) return 'Агент не находится в карантине.';
+  delete a.quarantinedAt;
+  delete a.quarantineReason;
+  a.enabled = true;
+  a.permissions = []; // Не восстанавливать права автоматически.
+  say(commander(), 'info', 'Агент ' + a.name + ' восстановлен без дополнительных разрешений.');
+  persist();
+  pushAgents();
+  return 'Агент ' + a.name + ' восстановлен. Дополнительные права нужно выдать вручную.';
+}
+function namedAgent(name) {
+  return agents.find(a => a.id.toLowerCase() === name.toLowerCase() || a.name.toLowerCase() === name.toLowerCase());
+}
+
 // ---------- OpenRouter: ТОЛЬКО бесплатные модели ----------
 const utcDay = () => new Date().toISOString().slice(0, 10);
 function ensureDay() { if (stats.day !== utcDay()) { stats.day = utcDay(); stats.used = 0; stats.exhausted = false; persist(); } }
@@ -491,8 +525,8 @@ async function executeTask(text) {
   if (!a) return 'Нет включённых агентов.';
   const plan = taskPlan(text);
   const seq = ++taskSequence;
-  const current = goal = { kind: 'research', title: text.slice(0, 100), status: 'running', done: 0, total: 1, summary: '' };
-  const active = () => goal === current && current.status === 'running' && seq === taskSequence;
+  const current = goal = { kind: 'research', agentId: a.id, title: text.slice(0, 100), status: 'running', done: 0, total: 1, summary: '' };
+  const active = () => goal === current && current.status === 'running' && seq === taskSequence && a.enabled && !a.quarantinedAt;
   setState(a, 'thinking', current.title); push('goal', current);
   say(a, 'info', 'Задача принята. Приступаю к выполнению: ' + current.title);
   void (async () => {
@@ -558,6 +592,14 @@ async function executeTask(text) {
 function handleCommand(text) {
   const command = text.toLowerCase().replace(/^\/+/, '').replace(/[.!]+$/, '').trim();
   let message;
+  const isolateMatch = command.match(/^(?:изолируй|изолировать|карантин|отключи агента|останови агента)\s+([\w-]+)$/i);
+  const releaseMatch = command.match(/^(?:восстанови агента|выпусти агента|сними карантин с)\s+([\w-]+)$/i);
+  if (isolateMatch || releaseMatch) {
+    const target = namedAgent((isolateMatch || releaseMatch)[1]);
+    message = !target ? 'Агент не найден.' : isolateMatch ? isolateAgent(target) : releaseAgent(target);
+    say(commander(), 'reply', message);
+    return { ok: true, settings, goal };
+  }
   if (/^(стоп|остановись|остановить|останови(?: всех| отряд| задачу)?|пауза|stop)$/.test(command)) {
     setRunning(false);
     message = 'Отряд остановлен. Текущая цель отменена.';
@@ -649,7 +691,7 @@ async function api(req, res, url) {
       if (n === 1) {
         if (b.prompt) a.prompt = String(b.prompt).slice(0, 600);
         if (b.model && String(b.model).endsWith(':free')) a.model = b.model;
-        if (Array.isArray(b.permissions)) a.permissions = b.permissions.filter(p => p in PERMS);
+        if (Array.isArray(b.permissions)) a.permissions = a.quarantinedAt ? [] : b.permissions.filter(p => p in PERMS);
       }
       agents.push(a); made.push(a);
     }
@@ -660,6 +702,7 @@ async function api(req, res, url) {
     const i = agents.findIndex(a => a.id === m[1]); if (i < 0) return json(res, 404, { error: 'Нет такого агента' });
     const a = agents[i];
     if (m[2] && req.method === 'POST') {
+      if (!a.enabled || a.quarantinedAt) return json(res, 409, { error: 'Агент отключён или изолирован' });
       const b = await body(req);
       if (!settings.running) return json(res, 409, { error: 'Отряд на паузе. Напиши «старт» в общий чат.' });
       let ctx = `Ты ${a.name} — агент сети UltraSquad. Роль: ${a.role}. Миссия: ${a.mission}. ${a.prompt || ''}\nОтвечай кратко и по-русски.`;
@@ -674,10 +717,10 @@ async function api(req, res, url) {
       const b = await body(req);
       if ('name' in b) a.name = String(b.name).slice(0, 24).toUpperCase() || a.name;
       for (const k of ['role', 'mission', 'prompt']) if (k in b) a[k] = String(b[k]).slice(0, 600);
-      if ('enabled' in b) a.enabled = !!b.enabled;
+      if ('enabled' in b) a.enabled = a.quarantinedAt ? false : !!b.enabled;
       if ('mission' in b && b.mission !== undefined && !TEMPLATES.some(t => t.mission === a.mission)) a.seeds = [a.mission];
       if ('model' in b) a.model = b.model === 'auto' || String(b.model).endsWith(':free') ? b.model : 'auto';
-      if (Array.isArray(b.permissions)) a.permissions = b.permissions.filter(p => p in PERMS);
+      if (Array.isArray(b.permissions)) a.permissions = a.quarantinedAt ? [] : b.permissions.filter(p => p in PERMS);
       persist(); pushAgents(); return json(res, 200, pub(a));
     }
     if (req.method === 'DELETE') { agents.splice(i, 1); RT.delete(a.id); lastEntry.delete(a.id); if (air.pin === a.id) air.pin = null; persist(); pushAgents(); return json(res, 200, { ok: true }); }
