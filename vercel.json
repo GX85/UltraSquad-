@@ -1,5 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "routes": [
+    {
+      "src": "/+(?:\\.env(?:\\.[^/]+)?|\\.git(?:/.*)?|\\.svn(?:/.*)?|\\.aws(?:/.*)?|\\.ssh(?:/.*)?|wp-login\\.php|wp-admin(?:/.*)?|phpmyadmin(?:/.*)?|xmlrpc\\.php|cgi-bin(?:/.*)?)/?",
+      "mitigate": {
+        "action": "deny"
+      }
+    },
+    {
+      "src": "/api/(?:state|events|settings|agents(?:/.*)?|chat|patrol|lockdown|bans|defender(?:/.*)?|export|simulate|cam(?:\\.mjpg)?|models|health)/?",
+      "mitigate": {
+        "action": "deny"
+      }
+    }
+  ]
 }
