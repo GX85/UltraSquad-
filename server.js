@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { isIP } = require('node:net');
 const { spawn } = require('child_process');
 const camLib = require('./lib/cam');
 const { createMonitor } = require('./lib/defender');
@@ -83,13 +84,16 @@ let dirty = false;
 const persist = () => { dirty = true; };
 function flush() {
   if (!dirty) return; dirty = false;
-  try { save('agents', agents); save('events', events.slice(-1000)); save('bans', bans); save('settings', settings); save('stats', stats); save('chat', chatLog); } catch (e) { log('persist', e); }
+  try { save('agents', agents); save('events', events.slice(-1000)); save('bans', bans); save('settings', settings); save('stats', stats); save('chat', chatLog); save('goals', { current: goal, history: goalHistory }); } catch (e) { log('persist', e); }
 }
 setInterval(flush, 5000);
 
 // ---------- SSE ----------
 const clients = new Set();
-const push = (type, data) => { const s = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`; for (const c of clients) c.write(s); };
+const push = (type, data) => { const s = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`; for (const c of clients) {
+  if (c.writableLength > 512 * 1024) { clients.delete(c); c.destroy(); }
+  else c.write(s);
+} };
 setInterval(() => { for (const c of clients) c.write(': ping\n\n'); }, 15000);
 
 // ---------- эфир ----------
@@ -297,8 +301,28 @@ const HONEYPOTS = ['/wp-login.php', '/wp-admin', '/.env', '/.env.local', '/.git/
   '/wp-content', '/vendor/phpunit', '/solr/', '/.vscode/sftp.json', '/telescope/requests', '/_ignition/execute-solution', '/boaform/', '/geoserver/', '/.docker/config.json'];
 // Признаки атак на СВОЙ сервер: path traversal, SQLi, XSS, RCE, Log4Shell, SSTI, инструменты сканирования
 const SUSPICIOUS = /(\.\.(\/|%2f)|%2e%2e|<script|union\s+select|\bor\s+1=1|sleep\(\d|benchmark\(|;\s*(cat|wget|curl|bash|nc|chmod)\s|\|\s*(sh|bash)\b|\$\{jndi:|\$\{\s*\w+\s*\}|\/bin\/(sh|bash)|\betc\/passwd|<\?php|\beval\(|base64_decode|\bpasswd\b.*:.*:0:0)/i;
-const BADUA = /sqlmap|nikto|nmap|masscan|zgrab|dirbuster|gobuster|wpscan|nuclei|acunetix|nessus|hydra|fuzz|feroxbuster|httpx\b|\bpython-requests\b|\bcurl\/|libwww|semrush|petalbot/i;
+const BADUA = /sqlmap|nikto|nmap|masscan|zgrab|dirbuster|gobuster|wpscan|nuclei|acunetix|nessus|hydra|fuzz|feroxbuster|httpx\b/i;
 const hits = new Map();
+const BAN_AGE = 60 * 60_000;
+const isSimulation = event => event.simulated || String(event.detail).includes('[имитация]');
+function pruneBans(now = Date.now()) {
+  let changed = false;
+  for (const [ip, record] of Object.entries(bans)) {
+    if (record.by !== 'auto' || (record.expiresAt || (record.ts + BAN_AGE)) > now) continue;
+    delete bans[ip];
+    changed = true;
+  }
+  if (changed) { persist(); push('bans', bans); }
+}
+setInterval(pruneBans, 15000).unref();
+function trapPath(value) {
+  let pathname = value.toLowerCase();
+  try { pathname = decodeURIComponent(pathname); } catch {}
+  return HONEYPOTS.some(trap => {
+    const base = trap.replace(/\/$/, '');
+    return pathname === base || pathname.startsWith(base + '/');
+  });
+}
 setInterval(() => {
   const cutoff = Date.now() - 10000;
   for (const [ip, timestamps] of hits) if (timestamps.at(-1) < cutoff) hits.delete(ip);
@@ -310,7 +334,7 @@ function logEvent(ev) {
   ev = { id: crypto.randomUUID().slice(0, 8), ts: Date.now(), ...ev };
   events.push(ev); if (events.length > 2000) events.shift();
   persist(); push('threat', ev);
-  if (ev.kind !== 'ban' && !ev.simulated) {
+  if (ev.kind !== 'ban' && !isSimulation(ev) && !isLocal(ev.ip)) {
     sentinelAlert(ev);
     if (/high|critical/.test(ev.severity)) noteAttack();
   }
@@ -348,15 +372,15 @@ function sentinelAlert(ev) {
 }
 function ban(ip, reason, by = 'auto') {
   if (!ip || bans[ip] || (isLocal(ip) && by !== 'sim')) return false;
-  bans[ip] = { ts: Date.now(), reason, by };
+  const ts = Date.now();
+  bans[ip] = { ts, reason, by, ...(by === 'auto' ? { expiresAt: ts + BAN_AGE } : {}) };
   logEvent({ kind: 'ban', severity: 'high', ip, detail: `${by}: ${reason}` });
   push('bans', bans); return true;
 }
 function inspect(req, ip) {
-  let url = (req.url || '').split('?')[0].toLowerCase(); try { url = decodeURIComponent(url); } catch {}
   const raw = req.url || '', ua = req.headers['user-agent'] || '';
-  if (HONEYPOTS.some(h => url.startsWith(h))) { logEvent({ kind: 'honeypot', severity: 'high', ip, detail: `Ловушка ${url} · ${ua.slice(0, 60)}` }); ban(ip, `ханипот ${url}`); return 'honeypot'; }
-  if (SUSPICIOUS.test(raw) || BADUA.test(ua)) { logEvent({ kind: 'attack', severity: 'critical', ip, detail: `Подозрительный запрос: ${raw.slice(0, 80)} · ${ua.slice(0, 40)}` }); ban(ip, 'сигнатура атаки'); return 'attack'; }
+  if (trapPath((req.url || '').split('?')[0])) { logEvent({ kind: 'honeypot', severity: 'high', ip, detail: 'Запрос к защищённому пути.' }); ban(ip, 'Защищённый путь'); return 'honeypot'; }
+  if (SUSPICIOUS.test(raw) || BADUA.test(ua)) { logEvent({ kind: 'attack', severity: 'critical', ip, detail: 'Запрос совпал с защитной сигнатурой.' }); ban(ip, 'сигнатура атаки'); return 'attack'; }
   const now = Date.now(); const a = (hits.get(ip) || []).filter(t => now - t < 10000); a.push(now); hits.set(ip, a);
   if (a.length > 150) { logEvent({ kind: 'flood', severity: 'medium', ip, detail: `${a.length} запросов за 10 сек` }); ban(ip, 'флуд'); return 'flood'; }
   return null;
@@ -392,18 +416,38 @@ const GOALS = {
   blocks: 'Проверка блокировок',
   defender: 'Проверка Microsoft Defender'
 };
-let goal = null;
+const storedGoals = load('goals', {});
+let goal = storedGoals.current || null;
+const goalHistory = Array.isArray(storedGoals.history) ? storedGoals.history.slice(0, 15) : [];
 let goalTimer;
+
+function finishGoal(current, status) {
+  current.status = status;
+  current.finishedAt = Date.now();
+  goalHistory.unshift({ ...current });
+  if (goalHistory.length > 15) goalHistory.pop();
+  persist();
+  push('goal', current);
+  push('goalHistory', goalHistory);
+}
+
+function cancelGoal() {
+  if (goal?.status !== 'running') return false;
+  clearTimeout(goalTimer);
+  for (const a of agents) if (rt(a).state !== 'idle') setState(a, 'idle');
+  finishGoal(goal, 'cancelled');
+  return true;
+}
+
+if (goal?.status === 'running') {
+  goal.summary = 'Сервер перезапустился до завершения задачи.';
+  finishGoal(goal, 'interrupted');
+}
 const commander = () => securityAgent() || { id: 'control', name: 'UltraSquad', role: 'Управление' };
 
 function setRunning(running) {
   settings.running = running;
-  if (!running && goal?.status === 'running') {
-    clearTimeout(goalTimer);
-    goal.status = 'cancelled';
-    for (const a of agents) if (rt(a).state !== 'idle') setState(a, 'idle');
-    push('goal', goal);
-  }
+  if (!running) cancelGoal();
   persist();
   push('settings', settings);
 }
@@ -413,10 +457,11 @@ function startGoal(kind) {
   if (goal?.status === 'running') return 'Отряд уже выполняет задачу. Отправь «стоп», чтобы отменить её.';
   const team = agents.filter(a => a.enabled);
   if (!team.length) return 'Включи хотя бы одного агента.';
-  const eventList = events.filter(e => !e.simulated && !String(e.detail).includes('[имитация]') && e.kind !== 'ban').slice(-250);
+  const eventList = events.filter(e => !isSimulation(e) && e.kind !== 'ban').slice(-250);
   const blocks = Object.entries(bans).filter(([, record]) => record.by !== 'sim');
   const records = kind === 'blocks' ? blocks : eventList;
-  const current = goal = { kind, title: GOALS[kind], status: 'running', done: 0, skipped: 0, total: team.length, summary: '' };
+  const current = goal = { id: crypto.randomUUID(), startedAt: Date.now(), kind, title: GOALS[kind], status: 'running', done: 0, skipped: 0, total: team.length, summary: '' };
+  persist();
   const sections = team.map(() => []);
   records.forEach((record, i) => sections[i % team.length].push(record));
   let index = 0;
@@ -462,12 +507,11 @@ function startGoal(kind) {
       goalTimer = setTimeout(() => void batch(), 100);
       return;
     }
-    current.status = 'done';
     const result = kind === 'blocks'
       ? 'Проверено записей в списке блокировок: ' + reviewed + '.'
       : 'Разобрано событий: ' + reviewed + ', из них серьёзных: ' + urgent + '.';
     current.summary = (defenderResult ? defenderResult + ' ' : '') + result;
-    push('goal', current);
+    finishGoal(current, 'done');
     say(commander(), 'finding', current.title + ' завершена. Отчитались ' + current.done + ' из ' + current.total + '. ' + current.summary);
   }
   goalTimer = setTimeout(() => void batch(), 100);
@@ -480,6 +524,11 @@ function handleCommand(text) {
   if (/^(стоп|остановись|остановить|останови(?: всех| отряд| задачу)?|пауза|stop)$/.test(command)) {
     setRunning(false);
     message = 'Отряд остановлен. Текущая цель отменена.';
+  } else if (/^(отмена|отмени цель|cancel)$/.test(command)) {
+    message = cancelGoal() ? 'Цель отменена. Отряд готов к новой задаче.' : 'Сейчас нет активной цели.';
+  } else if (/^(статус|status)$/.test(command)) {
+    const current = goal ? goal.title + ' · ' + goal.done + '/' + goal.total + ' · ' + ({ running: 'в работе', done: 'завершено', cancelled: 'отменено', interrupted: 'прервано' }[goal.status] || '') : 'Цель не выбрана.';
+    message = (settings.running ? 'Отряд готов. ' : 'Отряд на паузе. ') + current;
   } else if (/^(старт|продолжай|продолжить|запусти(?: отряд)?|start)$/.test(command)) {
     setRunning(true);
     message = 'Отряд готов. Выбери новую цель.';
@@ -501,7 +550,7 @@ function sysInfo() {
 }
 // Сводка по безопасности: оценка угрозы (0–100), разбивка по видам, топ источников
 function secStats() {
-  const now = Date.now(), hour = events.filter(e => e.kind !== 'ban' && !e.simulated && now - e.ts < 3600000);
+  const now = Date.now(), hour = events.filter(e => e.kind !== 'ban' && !isSimulation(e) && now - e.ts < 3600000);
   const byKind = {}; for (const e of hour) byKind[e.kind] = (byKind[e.kind] || 0) + 1;
   const bySrc = {}; for (const e of hour) if (e.ip) bySrc[e.ip] = (bySrc[e.ip] || 0) + 1;
   const top = Object.entries(bySrc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([ip, n]) => ({ ip, n, banned: !!bans[ip] }));
@@ -532,7 +581,7 @@ async function body(req) {
 }
 const state = () => ({ agents: agents.map(pub), perms: PERMS, templates: TEMPLATES.map(t => ({ key: t.key, role: t.role, mission: t.mission })), live: liveBuf.slice(-120),
   events: events.slice(-150), bans, sys: sysInfo(), quota: quota(), settings, keyOk: !!OR_KEY, max: MAX_AGENTS,
-  chat: chatLog.slice(-150), cam: { available: cam.available, entry: air.entry, pin: air.pin }, lock: lockState(), sec: secStats(), defender: defender.snapshot(), goal });
+  chat: chatLog.slice(-150), cam: { available: cam.available, entry: air.entry, pin: air.pin }, lock: lockState(), sec: secStats(), defender: defender.snapshot(), goal, goalHistory });
 const pushAgents = () => push('agents', agents.map(pub));
 
 async function api(req, res, url) {
@@ -621,7 +670,12 @@ async function api(req, res, url) {
     say(null, 'user', text);
     return json(res, 200, handleCommand(text));
   }
-  if (url === '/api/bans' && req.method === 'DELETE') { const b = await body(req); delete bans[b.ip]; persist(); push('bans', bans); return json(res, 200, bans); }
+  if (url === '/api/bans' && req.method === 'DELETE') {
+    const { ip } = await body(req);
+    if (typeof ip !== 'string' || !isIP(ip)) return json(res, 400, { error: 'Укажи корректный IP-адрес' });
+    if (!Object.hasOwn(bans, ip)) return json(res, 404, { error: 'Блокировка уже снята' });
+    delete bans[ip]; persist(); push('bans', bans); return json(res, 200, bans);
+  }
   if (url === '/api/simulate' && req.method === 'POST') {
     const fake = '203.0.113.' + (1 + Math.floor(Math.random() * 250));
     const k = rnd([['honeypot', 'high', 'Ловушка /wp-login.php · python-requests'], ['attack', 'critical', "Подозрительный запрос: /?id=1' or 1=1 · sqlmap"], ['flood', 'medium', '240 запросов за 10 сек']]);
@@ -636,10 +690,11 @@ const server = http.createServer({ requestTimeout: 15000, headersTimeout: 10000,
   res.setHeader('Referrer-Policy', 'no-referrer');
   const ip = norm(req.socket.remoteAddress);
   const url = (req.url || '/').split('?')[0];
+  if (bans[ip]?.by === 'auto' && (bans[ip].expiresAt || bans[ip].ts + BAN_AGE) <= Date.now()) pruneBans();
   if (bans[ip] && !isLocal(ip)) { res.writeHead(403); return res.end('banned'); }
   // карантин: пока включён, снаружи никого не пускаем (localhost работает как обычно)
   if (lock.on && !isLocal(ip)) { res.writeHead(503, { 'Retry-After': '120', 'Content-Type': 'text/plain' }); return res.end('Service temporarily unavailable'); }
-  const trap = HONEYPOTS.some(h => url.toLowerCase().startsWith(h));
+  const trap = trapPath(url);
   const verdict = isLocal(ip) && !trap ? null : inspect(req, ip);
   if (verdict) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Forbidden'); }
   try {

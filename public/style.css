@@ -369,3 +369,13 @@ select.field option{background:#1c1c1e;color:#fff}
 }
 
 #account [hidden] { display: none; }
+
+#goalProgress { width: 100%; margin-bottom: 10px; accent-color: var(--teal); }
+.goal-history { flex: none; padding: 12px 14px; }
+.goal-history summary { cursor: pointer; }
+.goal-history ol { margin: 10px 0 0; padding-left: 20px; max-height: 180px; overflow-y: auto; }
+.goal-history li { overflow-wrap: anywhere; margin-bottom: 6px; }
+.goal-history p { margin: 8px 0 0; }
+.hosted-preview .goal-history { display: none; }
+#liveConnection { display: block; }
+#incidentFilter { width: auto; max-width: 100%; }

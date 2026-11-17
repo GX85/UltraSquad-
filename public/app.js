@@ -144,22 +144,49 @@ function chatLine(m) {
   if (stick) box.scrollTop = box.scrollHeight;
   $('#chatCount').textContent = box.children.length;
 }
+const goalLabels = { running: 'В работе', done: 'Готово', cancelled: 'Отменено', interrupted: 'Прервано' };
 function renderGoal() {
   const g = S.goal;
-  const label = { running: 'В работе', done: 'Готово', cancelled: 'Отменено' };
   $('#goalStatus').textContent = g
-    ? label[g.status] + ' · ' + g.title + ' · ' + g.done + '/' + g.total + (g.summary ? ' · ' + g.summary : '')
+    ? (goalLabels[g.status] || g.status) + ' · ' + g.title + ' · ' + g.done + '/' + g.total + (g.summary ? ' · ' + g.summary : '')
     : 'Выбери цель для всего отряда.';
+  const meter = $('#goalProgress');
+  meter.hidden = g?.status !== 'running';
+  meter.max = Math.max(1, g?.total || 0);
+  meter.value = (g?.done || 0) + (g?.skipped || 0);
+  $('#cancelGoalBtn').disabled = g?.status !== 'running';
+  $$('#goalActions [data-task]').forEach(b => { b.disabled = S.settings.running === false || g?.status === 'running'; });
+}
+function renderGoalHistory() {
+  const list = $('#goalHistory');
+  list.replaceChildren(...(S.goalHistory || []).map(goal => {
+    const row = document.createElement('li');
+    row.textContent = new Date(goal.finishedAt).toLocaleString('ru-RU') + ' · ' + goal.title + ' · ' + (goalLabels[goal.status] || goal.status);
+    if (goal.summary) row.append(' · ' + goal.summary);
+    return row;
+  }));
+  $('#historyEmpty').hidden = list.children.length > 0;
 }
 $('#goalActions').onclick = async e => {
   const button = e.target.closest('[data-command]');
-  if (!button) return;
+  if (!button || button.disabled) return;
+  button.disabled = true;
   const result = await api('/chat', { method: 'POST', body: { text: button.dataset.command } });
+  button.disabled = false;
   if (result.error) toast(result.error, true);
+  else { S.settings = result.settings; S.goal = result.goal; }
+  renderGoal();
 };
 $('#chatForm').onsubmit = async e => {
-  e.preventDefault(); const t = $('#chatIn').value.trim(); if (!t) return; $('#chatIn').value = '';
-  const r = await api('/chat', { method: 'POST', body: { text: t } }); if (r.error) toast(r.error, true);
+  e.preventDefault();
+  const input = $('#chatIn'), button = $('#chatForm button');
+  const original = input.value, text = original.trim();
+  if (!text || button.disabled) return;
+  button.disabled = true;
+  const result = await api('/chat', { method: 'POST', body: { text } });
+  button.disabled = false;
+  if (result.error) { toast(result.error, true); return; }
+  if (input.value === original) input.value = '';
   const box = $('#chat'); box.scrollTop = box.scrollHeight;
 };
 $('#followBtn').onclick = () => setFollow(null);
@@ -286,15 +313,25 @@ $('#scanBtn').onclick = async () => {
 
 function renderSecurity() {
   renderDefender();
-  const ev = [...S.events].reverse();
+  const filter = $('#incidentFilter').value;
+  const ev = [...S.events].reverse().filter(e => filter === 'all' || (filter === 'test') === (e.simulated === true || String(e.detail).includes('[имитация]')));
   $('#evCount').textContent = ev.length;
-  $('#evRows').innerHTML = ev.map(e => `<div class="row row--ev ${esc(e.severity)}"><span class="mono dim">${time(e.ts)}</span><span class="mono">${esc(e.kind)}</span><span class="mono h-sm">${esc(e.ip)}</span><span class="cut dim">${esc(e.detail)}</span></div>`).join('') || '<p class="empty">Тихо. Ловушки взведены.</p>';
+  $('#evRows').innerHTML = ev.map(e => `<div class="row row--ev ${esc(e.severity)}"><span class="mono dim">${time(e.ts)}</span><span class="mono">${esc(e.kind)}${e.simulated || String(e.detail).includes('[имитация]') ? ' · тест' : ''}</span><span class="mono h-sm">${esc(e.ip)}</span><span class="cut dim">${esc(e.detail)}</span></div>`).join('') || '<p class="empty">Тихо. Ловушки взведены.</p>';
   const b = Object.entries(S.bans);
   $('#banCount').textContent = b.length;
-  $('#banRows').innerHTML = b.map(([ip, v]) => `<div class="row row--ban"><span class="mono">${esc(ip)}</span><span class="cut dim">${esc(v.reason)}</span><button class="link" data-unban="${esc(ip)}" type="button">Снять</button></div>`).join('') || '<p class="empty">Список пуст.</p>';
+  $('#banRows').innerHTML = b.map(([ip, v]) => `<div class="row row--ban"><span class="mono">${esc(ip)}</span><span class="cut dim">${esc(v.reason)}${v.expiresAt ? ' · до ' + time(v.expiresAt) : ''}</span><button class="link" data-unban="${esc(ip)}" type="button">Снять</button></div>`).join('') || '<p class="empty">Список пуст.</p>';
   renderShield();
 }
-$('#banRows').onclick = async e => { const b = e.target.closest('[data-unban]'); if (b) { S.bans = await api('/bans', { method: 'DELETE', body: { ip: b.dataset.unban } }); renderSecurity(); } };
+$('#incidentFilter').onchange = renderSecurity;
+$('#banRows').onclick = async e => {
+  const b = e.target.closest('[data-unban]');
+  if (!b || b.disabled) return;
+  b.disabled = true;
+  const result = await api('/bans', { method: 'DELETE', body: { ip: b.dataset.unban } });
+  if (result.error) { toast(result.error, true); b.disabled = false; return; }
+  S.bans = result;
+  renderSecurity();
+};
 $('#lockBtn').onclick = async () => { const r = await api('/lockdown', { method: 'POST', body: { on: !(S.lock && S.lock.on) } }); if (r.error) return toast(r.error, true); S.lock = r; renderShield(); };
 $('#simBtn').onclick = () => api('/simulate', { method: 'POST' });
 $('#patrolBtn').onclick = async () => {
@@ -430,8 +467,32 @@ const graph = (() => {
 // ---------- синхронизация ----------
 function connect() {
   const es = new EventSource('/api/events');
+  let recovering = false;
+  es.addEventListener('error', () => { recovering = true; $('#liveConnection').textContent = 'Связь потеряна · переподключаемся'; });
+  es.addEventListener('open', async () => {
+    $('#liveConnection').textContent = 'Локальный сервер подключён';
+    if (!recovering) return;
+    const current = await api('/state');
+    if (current.error || es.readyState !== EventSource.OPEN) return;
+    recovering = false;
+    S.goal = current.goal;
+    S.goalHistory = current.goalHistory;
+    S.settings = current.settings;
+    S.events = current.events;
+    S.bans = current.bans;
+    S.defender = current.defender;
+    S.lock = current.lock;
+    S.sec = current.sec;
+    S.quota = current.quota;
+    S.sys = current.sys;
+    S.agents = current.agents;
+    $('#chat').replaceChildren();
+    current.chat.forEach(chatLine);
+    renderGoal(); renderGoalHistory(); renderSecurity(); renderAgents(); renderStrip(); graph.sync();
+  });
   es.addEventListener('live', e => { onLive(JSON.parse(e.data)); renderStrip(); });
   es.addEventListener('cam', e => { const d = JSON.parse(e.data); follow = d.pin; followLabel(); if (d.entry) show(d.entry); });
+  es.addEventListener('goalHistory', e => { S.goalHistory = JSON.parse(e.data); renderGoalHistory(); });
   es.addEventListener('goal', e => { S.goal = JSON.parse(e.data); renderGoal(); });
   es.addEventListener('chat', e => chatLine(JSON.parse(e.data)));
   es.addEventListener('astate', e => {
@@ -440,13 +501,13 @@ function connect() {
     $('#sActive').textContent = S.agents.filter(v => v.state && v.state !== 'idle').length;
   });
   es.addEventListener('agents', e => { S.agents = JSON.parse(e.data); renderAgents(); renderStrip(); graph.sync(); });
-  es.addEventListener('threat', e => { const ev = JSON.parse(e.data); S.events.push(ev); if (S.events.length > 300) S.events.shift(); renderSecurity(); if (ev.kind !== 'ban') toast(`${ev.kind.toUpperCase()} · ${ev.ip}\n${ev.detail}`, true); });
+  es.addEventListener('threat', e => { const ev = JSON.parse(e.data); S.events.push(ev); if (S.events.length > 300) S.events.shift(); renderSecurity(); if (ev.kind !== 'ban' && !ev.simulated) toast(`${ev.kind.toUpperCase()} · ${ev.ip}\n${ev.detail}`, true); });
   es.addEventListener('bans', e => { S.bans = JSON.parse(e.data); renderSecurity(); });
   es.addEventListener('defender', e => { S.defender = JSON.parse(e.data); renderDefender(); });
   es.addEventListener('sec', e => { S.sec = JSON.parse(e.data); if (location.hash === '#security') renderShield(); });
   es.addEventListener('lock', e => { S.lock = JSON.parse(e.data); renderShield(); toast(S.lock.on ? '🛡 Карантин включён — внешний доступ закрыт' : 'Карантин снят', S.lock.on); });
   es.addEventListener('quota', e => { S.quota = JSON.parse(e.data); renderStrip(); if (location.hash === '#models') renderModels(); });
-  es.addEventListener('settings', e => { S.settings = JSON.parse(e.data); renderStrip(); });
+  es.addEventListener('settings', e => { S.settings = JSON.parse(e.data); renderStrip(); renderGoal(); });
   es.addEventListener('sys', e => { S.sys = JSON.parse(e.data); });
 }
 (async () => {
@@ -454,6 +515,7 @@ function connect() {
   const s = await api('/state');
   if (s.error) {
     $('#heroStat').textContent = 'Локальная панель · 127.0.0.1:7777';
+    $('#liveConnection').textContent = 'Локальный сервер недоступен';
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) {
       const notice = document.createElement('div');
       notice.className = 'hosted-notice';
@@ -477,7 +539,7 @@ function connect() {
   (s.chat || []).forEach(chatLine); $('#chat').scrollTop = $('#chat').scrollHeight;
   camOk = !!s.cam?.available; follow = s.cam?.pin || null; followLabel(); setStage(stageMode);
   const last = s.cam?.entry || [...liveLog].reverse().find(e => e.type === 'page' || e.type === 'search'); if (last) show(last);
-  renderStrip(); renderAgents(); renderSecurity(); renderTiles(); renderGoal(); connect();
+  renderStrip(); renderAgents(); renderSecurity(); renderTiles(); renderGoal(); renderGoalHistory(); connect();
   if (location.hash === '#models') renderModels();
   if (!s.keyOk) toast('Ключ OpenRouter не найден в .env — агенты работают на автопилоте', true);
 })();

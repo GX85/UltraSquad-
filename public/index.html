@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=chat-layout-2">
+<link rel="stylesheet" href="style.css?v=defense-20261117">
 </head>
 <body>
 <div class="hero" id="shell">
@@ -107,16 +107,23 @@
         <div class="live__side">
           <div class="pane goals pad" id="goalActions">
             <p id="goalStatus" role="status">Выбери цель для всего отряда.</p>
+            <progress id="goalProgress" aria-label="Прогресс цели" hidden></progress>
             <div class="tools">
-              <button class="btn btn--ghost btn--sm" data-command="цель: журнал" type="button">Журнал</button>
-              <button class="btn btn--ghost btn--sm" data-command="цель: блокировки" type="button">Блокировки</button>
-              <button class="btn btn--ghost btn--sm" data-command="цель: defender" type="button">Defender</button>
+              <button class="btn btn--ghost btn--sm" data-task data-command="цель: журнал" type="button">Журнал</button>
+              <button class="btn btn--ghost btn--sm" data-task data-command="цель: блокировки" type="button">Блокировки</button>
+              <button class="btn btn--ghost btn--sm" data-task data-command="цель: defender" type="button">Defender</button>
               <button class="btn btn--ghost btn--sm" data-command="стоп" type="button">Стоп</button>
               <button class="btn btn--ghost btn--sm" data-command="старт" type="button">Старт</button>
+                <button class="btn btn--ghost btn--sm" id="cancelGoalBtn" data-command="отмена" type="button" disabled>Отменить цель</button>
             </div>
           </div>
+          <details class="pane pad goal-history">
+            <summary>История целей</summary>
+            <p id="historyEmpty" class="dim">Завершённых целей пока нет.</p>
+            <ol id="goalHistory"></ol>
+          </details>
           <div class="pane chat">
-            <div class="pane__head"><span>Чат отряда</span><span class="dim" id="chatCount">0</span></div>
+            <div class="pane__head"><span>Чат отряда <small class="dim" id="liveConnection">Подключение…</small></span><span class="dim" id="chatCount">0</span></div>
             <div class="chat__body" id="chat"></div>
             <div class="pad hosted-chat" id="hostedChat" hidden>
               <p>Чат и команды работают через сервер UltraSquad на твоём устройстве.</p>
@@ -194,7 +201,7 @@
           </div>
         </div>
         <div class="pane">
-          <div class="pane__head"><span>Журнал угроз</span>
+          <div class="pane__head"><span>Журнал угроз</span><label class="dim" for="incidentFilter">События</label><select class="field" id="incidentFilter"><option value="real">Реальные</option><option value="test">Тестовые</option><option value="all">Все</option></select>
             <div class="tools"><span class="dim" id="evCount">0</span><a class="btn btn--ghost btn--sm" id="exportBtn" href="/api/export" download>Выгрузить</a></div></div>
           <div class="rows" id="evRows"></div>
         </div>
