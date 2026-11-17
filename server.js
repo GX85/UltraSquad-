@@ -424,6 +424,9 @@ let goalTimer;
 function finishGoal(current, status) {
   current.status = status;
   current.finishedAt = Date.now();
+  for (const report of current.reports || []) {
+    if (report.status === 'pending') report.status = 'unprocessed';
+  }
   goalHistory.unshift({ ...current });
   if (goalHistory.length > 15) goalHistory.pop();
   persist();
@@ -460,13 +463,17 @@ function startGoal(kind) {
   const eventList = events.filter(e => !isSimulation(e) && e.kind !== 'ban').slice(-250);
   const blocks = Object.entries(bans).filter(([, record]) => record.by !== 'sim');
   const records = kind === 'blocks' ? blocks : eventList;
-  const current = goal = { id: crypto.randomUUID(), startedAt: Date.now(), kind, title: GOALS[kind], status: 'running', done: 0, skipped: 0, total: team.length, summary: '' };
+  const current = goal = {
+    id: crypto.randomUUID(), startedAt: Date.now(), kind, title: GOALS[kind], status: 'running',
+    done: 0, skipped: 0, total: team.length, summary: '',
+    sourceRecords: records.length, reviewed: 0, serious: 0,
+    reports: team.map(a => ({ id: a.id, name: a.name, status: 'pending', assigned: 0, reviewed: 0, serious: 0 }))
+  };
   persist();
   const sections = team.map(() => []);
   records.forEach((record, i) => sections[i % team.length].push(record));
+  sections.forEach((section, i) => { current.reports[i].assigned = section.length; });
   let index = 0;
-  let reviewed = 0;
-  let urgent = 0;
   let defenderResult = '';
 
   for (const a of team) setState(a, 'thinking', current.title);
@@ -483,22 +490,27 @@ function startGoal(kind) {
     const end = Math.min(index + 5, team.length);
     for (; index < end; index++) {
       const a = team[index];
+      const report = current.reports[index];
       if (!a.enabled || !agents.includes(a)) {
         current.skipped++;
+        report.status = 'skipped';
         if (agents.includes(a)) setState(a, 'idle');
         continue;
       }
       const part = sections[index];
       let count = 0;
       if (kind !== 'blocks') count = part.filter(e => e.severity === 'high' || e.severity === 'critical').length;
-      reviewed += part.length;
-      urgent += count;
+      report.reviewed = part.length;
+      report.serious = count;
+      report.status = part.length ? 'reviewed' : 'empty';
+      current.reviewed += part.length;
+      current.serious += count;
       current.done++;
-      a.steps++;
+      if (part.length) a.steps++;
       const text = kind === 'blocks'
         ? 'Записей в выделенной части списка блокировок: ' + part.length + '.'
         : 'Событий в выделенной части журнала: ' + part.length + ', серьёзных: ' + count + '.';
-      live(a, 'patrol', { text, goal: current.title });
+      if (part.length) live(a, 'patrol', { text, goal: current.title });
       setState(a, 'idle');
     }
     persist();
@@ -508,8 +520,8 @@ function startGoal(kind) {
       return;
     }
     const result = kind === 'blocks'
-      ? 'Проверено записей в списке блокировок: ' + reviewed + '.'
-      : 'Разобрано событий: ' + reviewed + ', из них серьёзных: ' + urgent + '.';
+      ? 'Проверено записей в списке блокировок: ' + current.reviewed + ' из ' + current.sourceRecords + '.'
+      : 'Разобрано событий: ' + current.reviewed + ' из ' + current.sourceRecords + ', из них серьёзных: ' + current.serious + '.';
     current.summary = (defenderResult ? defenderResult + ' ' : '') + result;
     finishGoal(current, 'done');
     say(commander(), 'finding', current.title + ' завершена. Отчитались ' + current.done + ' из ' + current.total + '. ' + current.summary);

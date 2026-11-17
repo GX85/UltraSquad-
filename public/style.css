@@ -376,6 +376,8 @@ select.field option{background:#1c1c1e;color:#fff}
 .goal-history ol { margin: 10px 0 0; padding-left: 20px; max-height: 180px; overflow-y: auto; }
 .goal-history li { overflow-wrap: anywhere; margin-bottom: 6px; }
 .goal-history p { margin: 8px 0 0; }
-.hosted-preview .goal-history { display: none; }
+.hosted-preview .goal-history, .goal-history[hidden] { display: none; }
+#goalReports { padding-inline-start: 20px; }
+#goalReports li::marker { color: var(--text-3); }
 #liveConnection { display: block; }
 #incidentFilter { width: auto; max-width: 100%; }

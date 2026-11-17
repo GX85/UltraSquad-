@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=defense-20261117">
+<link rel="stylesheet" href="style.css?v=goal-reports">
 </head>
 <body>
 <div class="hero" id="shell">
@@ -117,6 +117,11 @@
                 <button class="btn btn--ghost btn--sm" id="cancelGoalBtn" data-command="отмена" type="button" disabled>Отменить цель</button>
             </div>
           </div>
+          <details class="pane pad goal-history" id="goalReport" hidden>
+            <summary>Отчёт по агентам</summary>
+            <p id="goalRecordCount" class="dim"></p>
+            <ol id="goalReports"></ol>
+          </details>
           <details class="pane pad goal-history">
             <summary>История целей</summary>
             <p id="historyEmpty" class="dim">Завершённых целей пока нет.</p>

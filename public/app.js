@@ -145,6 +145,18 @@ function chatLine(m) {
   $('#chatCount').textContent = box.children.length;
 }
 const goalLabels = { running: 'В работе', done: 'Готово', cancelled: 'Отменено', interrupted: 'Прервано' };
+function reportRows(goal) {
+  const labels = { pending: 'в очереди', skipped: 'пропущен', unprocessed: 'не успел начать', empty: 'записей не было' };
+  return (goal.reports || []).map(agent => {
+    const row = document.createElement('li');
+    let result = labels[agent.status] || 'проверено ' + agent.reviewed + ' из ' + agent.assigned;
+    if (agent.status === 'reviewed' && goal.kind !== 'blocks') result += ', серьёзных: ' + agent.serious;
+    if (['skipped', 'unprocessed'].includes(agent.status) && agent.assigned) result += ' · назначено ' + agent.assigned;
+    row.textContent = agent.name + ' · ' + result;
+    return row;
+  });
+}
+
 function renderGoal() {
   const g = S.goal;
   $('#goalStatus').textContent = g
@@ -154,6 +166,11 @@ function renderGoal() {
   meter.hidden = g?.status !== 'running';
   meter.max = Math.max(1, g?.total || 0);
   meter.value = (g?.done || 0) + (g?.skipped || 0);
+  $('#goalReport').hidden = !g?.reports?.length;
+  if (g?.reports?.length) {
+    $('#goalRecordCount').textContent = 'Записей проверено: ' + g.reviewed + ' из ' + g.sourceRecords;
+    $('#goalReports').replaceChildren(...reportRows(g));
+  }
   $('#cancelGoalBtn').disabled = g?.status !== 'running';
   $$('#goalActions [data-task]').forEach(b => { b.disabled = S.settings.running === false || g?.status === 'running'; });
 }
@@ -163,6 +180,15 @@ function renderGoalHistory() {
     const row = document.createElement('li');
     row.textContent = new Date(goal.finishedAt).toLocaleString('ru-RU') + ' · ' + goal.title + ' · ' + (goalLabels[goal.status] || goal.status);
     if (goal.summary) row.append(' · ' + goal.summary);
+    if (goal.reports?.length) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Результаты агентов';
+      const list = document.createElement('ul');
+      list.append(...reportRows(goal));
+      details.append(summary, list);
+      row.append(details);
+    }
     return row;
   }));
   $('#historyEmpty').hidden = list.children.length > 0;
